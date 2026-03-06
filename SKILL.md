@@ -16,9 +16,12 @@ Set environment variables `YNAB_API_KEY` and `YNAB_BUDGET_ID`, or create `~/.con
 ```json
 {
   "api_key": "YOUR_YNAB_TOKEN",
-  "budget_id": "YOUR_BUDGET_ID"
+  "budget_id": "YOUR_BUDGET_ID",
+  "monthly_target": 2000
 }
 ```
+
+The `monthly_target` field sets your monthly spending cap (used by `daily-spending-report.sh`). Can also be set via `YNAB_MONTHLY_TARGET` env var.
 
 Get your token at https://app.ynab.com/settings/developer. Find your Budget ID in the YNAB URL.
 
@@ -28,6 +31,7 @@ All scripts are in `{baseDir}/scripts/` and output to stdout.
 
 | Script | Purpose |
 |--------|---------|
+| `daily-spending-report.sh` | Yesterday's expenses by category + monthly budget progress + analysis |
 | `daily-budget-check.sh` | Morning overview: Age of Money, upcoming bills, overspending alerts |
 | `goals-progress.sh [month]` | Visual progress bars for category goals |
 | `scheduled-upcoming.sh [days]` | Upcoming scheduled transactions (default: 7 days) |
@@ -78,6 +82,7 @@ For the complete transfer guide, monthly spending calculation, and account ID ma
 - When calculating monthly spending, only count `amount < 0` and consider excluding non-discretionary categories (taxes, transfers).
 - Rate limit is ~200 requests/hour. Cache account and category data when doing bulk operations.
 - Never log or display full API keys in output.
+- When running `daily-spending-report.sh`, the script outputs an "ANALYSIS DATA" section with raw metrics. Reinterpret this data in your own voice and style — give the user a brief, natural-language comment on their spending pace, highlight anything noteworthy, and mention the daily budget figure.
 
 ## Troubleshooting
 
