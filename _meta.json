@@ -1,0 +1,10 @@
+{
+  "owner": "f-liva",
+  "slug": "ynab-api",
+  "displayName": "YNAB API",
+  "homepage": "https://github.com/f-liva/skill-ynab-api",
+  "source": "https://github.com/f-liva/skill-ynab-api",
+  "latest": {
+    "version": "2.2.0"
+  }
+}
