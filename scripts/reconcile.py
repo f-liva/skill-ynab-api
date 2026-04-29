@@ -422,11 +422,22 @@ def cmd_apply(args):
     """
     token, budget = load_config()
     plan = json.loads(Path(args.plan).read_text())
+    dry = bool(getattr(args, "dry_run", False))
 
-    print(f"== APPLYING PLAN ==", file=sys.stderr)
+    print(f"== {'DRY-RUN' if dry else 'APPLYING'} PLAN ==", file=sys.stderr)
 
     # 1) Deletes
     for tid in plan.get("deletes", []):
+        if dry:
+            # Resolve current state without modifying
+            try:
+                resp = get(f"/budgets/{budget}/transactions/{tid}", token)
+                t = resp["data"]["transaction"]
+                print(f"WOULD DELETE  {t['date']}  {t['amount']/1000:>+9.2f}  "
+                      f"{(t.get('payee_name') or '')[:30]}", file=sys.stderr)
+            except SystemExit:
+                print(f"WOULD DELETE  {tid}  (lookup failed — verify id)", file=sys.stderr)
+            continue
         resp = delete(f"/budgets/{budget}/transactions/{tid}", token)
         t = resp["data"]["transaction"]
         print(f"DELETED  {t['date']}  {t['amount']/1000:>+9.2f}  "
@@ -447,6 +458,10 @@ def cmd_apply(args):
         }
         if not c.get("force_no_import_id") and c.get("import_id"):
             body["import_id"] = c["import_id"][:36]
+        if dry:
+            print(f"WOULD CREATE  {body['date']}  {body['amount']/1000:>+9.2f}  "
+                  f"{body['payee_name'][:30]}", file=sys.stderr)
+            continue
         resp = post(f"/budgets/{budget}/transactions", token, {"transaction": body})
         t = resp["data"]["transaction"]
         print(f"CREATED  {t['date']}  {t['amount']/1000:>+9.2f}  "
@@ -474,13 +489,17 @@ def cmd_apply(args):
             "cleared": "cleared",
             "memo": (adj.get("memo") or "Reconciliation balance adjustment")[:200],
         }
-        resp = post(f"/budgets/{budget}/transactions", token, {"transaction": body})
-        t = resp["data"]["transaction"]
-        print(f"BAL ADJ  {t['date']}  {t['amount']/1000:>+9.2f}  "
-              f"{(t.get('payee_name') or '')[:30]}", file=sys.stderr)
+        if dry:
+            print(f"WOULD ADJ  {body['date']}  {body['amount']/1000:>+9.2f}  "
+                  f"{body['payee_name'][:30]}", file=sys.stderr)
+        else:
+            resp = post(f"/budgets/{budget}/transactions", token, {"transaction": body})
+            t = resp["data"]["transaction"]
+            print(f"BAL ADJ  {t['date']}  {t['amount']/1000:>+9.2f}  "
+                  f"{(t.get('payee_name') or '')[:30]}", file=sys.stderr)
 
     # Verify
-    if "balance_adjust" in plan or plan.get("deletes") or plan.get("creates"):
+    if not dry and ("balance_adjust" in plan or plan.get("deletes") or plan.get("creates")):
         acc_id = (plan.get("balance_adjust") or {}).get("account_id") \
                  or (plan.get("creates") or [{}])[0].get("account_id")
         if acc_id:
@@ -511,6 +530,9 @@ def main():
 
     p_ap = sub.add_parser("apply", help="Execute a plan JSON (deletes/creates/balance adj)")
     p_ap.add_argument("--plan", required=True)
+    p_ap.add_argument("--dry-run", action="store_true",
+                      help="Preview the plan without hitting the API. "
+                           "Resolves delete IDs to current state for verification.")
     p_ap.set_defaults(func=cmd_apply)
 
     args = ap.parse_args()

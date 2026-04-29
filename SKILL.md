@@ -75,9 +75,68 @@ single Balance Adjustment in the plan. Document the most likely
 cause in the memo (settlement latency, mis-class on a card without
 a CSV, etc.) so future reconciles don't re-investigate the noise.
 
-**The detailed strategies, CSV format quirks, match algorithm, and
-YNAB API gotchas are in [references/reconciliation-guide.md](references/reconciliation-guide.md).
-Read that file before running an actual reconciliation.**
+**MUST read [references/reconciliation-guide.md](references/reconciliation-guide.md)
+BEFORE the first `apply`** — it covers CSV format quirks per bank,
+the match algorithm, YNAB API gotchas (reserved payee names that
+return 400, batch POST auto-merge that silently dedupes), and
+"CSV is law" caveats. Skipping the guide is how you ship a wrong
+reconcile.
+
+### Plan JSON shape
+
+```json
+{
+  "deletes": [
+    "txn-uuid-1",
+    "txn-uuid-2"
+  ],
+  "creates": [
+    {
+      "account_id": "uuid",
+      "date": "2026-04-29",
+      "amount_milli": -2990,
+      "payee_name": "ASPIAG SERVICE S.R.L.",
+      "category_id": "uncategorized-uuid",
+      "memo": "card-8228 Approved/Payment",
+      "import_id": "YNAB:-2990:2026-04-29:aspiag",
+      "force_no_import_id": false
+    }
+  ],
+  "balance_adjust": {
+    "account_id": "uuid",
+    "date": "2026-04-29",
+    "amount_milli": -3061,
+    "payee_name": "Riconciliazione Gnosis 2026-04-29",
+    "category_id": "uncategorized-uuid",
+    "memo": "Chiusura gap residuo 30d — possibili spese mis-class altra carta"
+  }
+}
+```
+
+Notes:
+- `amount_milli` is signed: negative = outflow, positive = inflow
+  (`int(amount_eur * 1000)`).
+- `category_id` is required for creates that affect the budget.
+  Use the Uncategorized id for outflows when category is unknown,
+  Inflow:Ready-to-Assign id for unbudgeted inflows. Get both via
+  `GET /budgets/{id}/categories`.
+- `import_id` is optional. Use it for tx CSV-derived for idempotency
+  (re-running the plan won't duplicate).
+- `force_no_import_id: true` forces YNAB to create a brand-new
+  entry instead of auto-merging into a near-match — needed when
+  adding a separate purchase at the same merchant on the same day
+  for the same amount.
+- `payee_name` for `balance_adjust` MUST NOT start with a YNAB-
+  reserved name (`Transfer :`, `Starting Balance`,
+  `Manual Balance Adjustment`, `Reconciliation Balance Adjustment`)
+  — POST will 400. Use `Riconciliazione <account> <date>` instead.
+
+### Dry-run before apply
+
+Pass `--dry-run` to `reconcile.py apply` to preview the plan
+(deletes resolved to current state, creates and balance_adjust
+echoed) without hitting the API. Use this on the user's first
+reconciliation, or whenever the plan touches > 20 transactions.
 
 ## Key API Concepts
 
