@@ -31,6 +31,7 @@ Once installed, Claude Code can:
 - **Upcoming bills** -- "what bills are coming up?"
 - **Compare months** -- "compare this month vs last month"
 - **Create transfers** -- properly linked between YNAB accounts
+- **Reconcile accounts** -- "riconcilia ING, CSV è qui, saldo reale 2027.83" / "reconcile Gnosis with this CSV". Walks the user account-by-account, matches CSV rows against YNAB, surfaces cross-account duplicates and sibling pairs, and applies fixes via API.
 
 ## Included Scripts
 
@@ -40,6 +41,7 @@ Once installed, Claude Code can:
 - `month-comparison.sh` -- Month-over-month spending analysis
 - `transfer.sh` -- Properly linked account transfers
 - `ynab-helper.sh` -- General helper (search, categories, etc.)
+- `reconcile.py` -- Match a bank/card CSV against a YNAB account, classify diffs (csv-only, ynab-only, cross-account dups, sibling pairs), and apply fixes via a plan JSON. See `references/reconciliation-guide.md` for the full strategy.
 
 All scripts output to stdout and can be scheduled with any cron/scheduler.
 

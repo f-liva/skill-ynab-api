@@ -1,13 +1,13 @@
 ---
 name: ynab-api
-description: "YNAB (You Need A Budget) budget management via API. Add transactions, track goals, monitor spending, create transfers, and generate budget reports. Use this skill whenever the user mentions YNAB, budget tracking, spending analysis, budget goals, Age of Money, or wants to manage their personal finances -- even if they just say 'add an expense', 'how much did I spend', 'check my budget', or 'upcoming bills' without naming YNAB explicitly. Also use for automated budget reports and financial summaries."
+description: "YNAB (You Need A Budget) budget management via API. Add transactions, track goals, monitor spending, create transfers, generate reports, and reconcile accounts against bank/card CSV exports. Use this skill whenever the user mentions YNAB, budget tracking, spending analysis, budget goals, Age of Money, account reconciliation, or wants to manage their personal finances -- even if they just say 'add an expense', 'how much did I spend', 'check my budget', 'upcoming bills', 'riconcilia', or 'reconcile' without naming YNAB explicitly. Also use for automated budget reports and financial summaries."
 user-invocable: true
 metadata: {"requiredEnv": ["YNAB_API_KEY", "YNAB_BUDGET_ID"]}
 ---
 
 # YNAB Budget Management
 
-Manage your YNAB budget via the API with ready-to-use bash scripts. Requires `curl` and `jq`.
+Manage your YNAB budget via the API with ready-to-use bash + Python scripts. Requires `curl`, `jq`, and `python3` (3.10+, no external deps).
 
 ## Configuration
 
@@ -39,6 +39,45 @@ All scripts are in `{baseDir}/scripts/` and output to stdout.
 | `transfer.sh SRC DEST AMT DATE [MEMO]` | Create a properly linked account transfer |
 | `ynab-helper.sh <command>` | General helper: search payees, list categories, add transactions |
 | `setup-automation.sh` | Test config and list available scripts |
+| `reconcile.py <subcmd>` | Reconcile YNAB accounts against bank/card CSV exports (`accounts`, `analyze`, `apply`) |
+
+## Reconciliation Workflow
+
+When the user says "riconcilia", "reconcile", "compare with the bank",
+or supplies a CSV export, drive this conversational loop:
+
+1. **List accounts** with `python3 scripts/reconcile.py accounts`. Show the user the
+   open accounts and ask which they want to reconcile.
+2. **Collect inputs** for each chosen account:
+   - The real balance (from the bank/card app)
+   - Path to the CSV export, if any
+3. **Analyze** with
+   `python3 scripts/reconcile.py analyze --account-id <UUID> --csv <path> --real-balance <N> --out /tmp/diff.json`
+   This produces a structured diff: `csv_only`, `ynab_only`,
+   `cross_account_dup_candidates`, `sibling_pairs`, plus skipped CSV
+   rows (Reversal pairs, InsufficientFunds).
+4. **Walk the buckets with the user**, deciding for each item:
+   - `csv_only` → ADD to YNAB (CSV is law for that account)
+   - `cross_account_dup_candidates` → DELETE the YNAB-only entry
+     (the user paid once but tracked it on two accounts)
+   - `sibling_pairs` with asymmetric `import_id` → DELETE the manual
+     entry (the CSV import is canonical)
+   - `ynab_only` without a candidate match → leave (cash, pre-CSV
+     period, mis-class on a card without a CSV)
+5. **Build a plan JSON** with `deletes`, `creates`, `balance_adjust`
+   and run `python3 scripts/reconcile.py apply --plan /tmp/plan.json`. The
+   tool sleeps between calls to respect the 200/hr rate limit.
+6. **Verify** by re-reading the account balance and confirming it
+   matches the real balance.
+
+If a small residual gap remains (≤ ~3% of balance), close it with a
+single Balance Adjustment in the plan. Document the most likely
+cause in the memo (settlement latency, mis-class on a card without
+a CSV, etc.) so future reconciles don't re-investigate the noise.
+
+**The detailed strategies, CSV format quirks, match algorithm, and
+YNAB API gotchas are in [references/reconciliation-guide.md](references/reconciliation-guide.md).
+Read that file before running an actual reconciliation.**
 
 ## Key API Concepts
 
